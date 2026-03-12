@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PriceOracle — AI Price Prediction Dashboard</title>
+  <meta name="description" content="Predict future e-commerce product prices using AI and historical data analysis." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+
+<body>
+
+  <!-- ═══════════════ HERO ═══════════════ -->
+  <section id="hero" class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+      <h1 class="hero-title">
+        <span class="gradient-text">PriceOracle</span>
+      </h1>
+      <p class="hero-subtitle">AI-powered e-commerce price prediction — paste any product link and see the future.</p>
+
+      <form id="url-form" class="url-form">
+        <div class="input-glow">
+          <input id="url-input" type="url" placeholder="Paste product link from Amazon, Flipkart, or any store…"
+            autocomplete="off" required />
+          <button type="submit" id="analyze-btn">
+            <span class="btn-text">Analyze</span>
+            <span class="btn-loader hidden">
+              <span class="spinner"></span>
+            </span>
+          </button>
+        </div>
+      </form>
+
+      <p class="hero-hint">or <a href="#" id="manual-toggle">enter product details manually</a></p>
+
+      <!-- manual fallback -->
+      <form id="manual-form" class="manual-form hidden">
+        <input id="m-name" type="text" placeholder="Product name" required />
+        <input id="m-price" type="number" step="0.01" min="1" placeholder="Current price (₹)" required />
+        <input id="m-desc" type="text" placeholder="Short description (optional)" />
+        <button type="submit" class="btn-primary">Predict Price</button>
+      </form>
+
+      <div id="error-msg" class="error-msg hidden"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════ RESULTS ═══════════════ -->
+  <section id="results" class="results hidden">
+
+    <!-- product card -->
+    <div class="container">
+      <div class="section-header">
+        <h2>Product Details</h2>
+        <span id="source-badge" class="badge"></span>
+      </div>
+      <div id="product-card" class="glass-card product-card">
+        <div class="product-img-wrap">
+          <img id="product-img" src="" alt="" />
+        </div>
+        <div class="product-info">
+          <h3 id="product-name"></h3>
+          <p id="product-desc" class="product-desc"></p>
+          <div class="product-meta">
+            <span class="price-tag" id="product-price"></span>
+            <span class="price-original" id="product-original"></span>
+            <span class="category-tag" id="product-category"></span>
+            <span class="rating-tag" id="product-rating"></span>
+          </div>
+          <!-- Extra scraped details -->
+          <div id="product-extra" class="product-extra"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- key metrics -->
+    <div class="container">
+      <h2>Price Prediction Overview</h2>
+      <div class="metrics-grid">
+        <div class="metric-card glass-card" id="mc-7d">
+          <span class="metric-label">7-Day Forecast</span>
+          <span class="metric-value" id="mv-7d"></span>
+          <span class="metric-change" id="mc-7d-pct"></span>
+        </div>
+        <div class="metric-card glass-card" id="mc-30d">
+          <span class="metric-label">30-Day Forecast</span>
+          <span class="metric-value" id="mv-30d"></span>
+          <span class="metric-change" id="mc-30d-pct"></span>
+        </div>
+        <div class="metric-card glass-card">
+          <span class="metric-label">Trend</span>
+          <span class="metric-value" id="mv-trend"></span>
+        </div>
+        <div class="metric-card glass-card">
+          <span class="metric-label">Confidence</span>
+          <span class="metric-value" id="mv-conf"></span>
+        </div>
+        <div class="metric-card glass-card" id="mc-model">
+          <span class="metric-label">Model Used</span>
+          <span class="metric-value" id="mv-model"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ML Model Performance Table -->
+    <div class="container">
+      <h2>🤖 ML Model Performance Analysis</h2>
+      <p class="section-subtitle" id="model-table-subtitle"></p>
+      <div class="glass-card table-card">
+        <table id="model-perf-table" class="perf-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>R² Score</th>
+              <th>MAE</th>
+              <th>RMSE</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="model-perf-body"></tbody>
+        </table>
+      </div>
+      <!-- Per-category scores -->
+      <div id="cat-model-section" class="hidden" style="margin-top:1.5rem;">
+        <h3 style="margin-bottom:.75rem;font-size:1.1rem;">📊 Category-Level Model Scores</h3>
+        <div class="glass-card table-card">
+          <table id="cat-model-table" class="perf-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>R² Score</th>
+                <th>MAE</th>
+                <th>RMSE</th>
+              </tr>
+            </thead>
+            <tbody id="cat-model-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- price chart -->
+    <div class="container">
+      <h2>Price Trend &amp; Forecast</h2>
+      <div class="glass-card chart-card">
+        <canvas id="price-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- insights -->
+    <div class="container">
+      <h2>AI Insights</h2>
+      <div id="insights-grid" class="insights-grid"></div>
+    </div>
+
+    <!-- similar products -->
+    <div class="container">
+      <h2>Similar Products</h2>
+      <div id="similar-grid" class="similar-grid"></div>
+    </div>
+
+    <!-- category comparison -->
+    <div class="container">
+      <h2>Category Price Trends</h2>
+      <div class="glass-card chart-card">
+        <canvas id="category-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- category stats -->
+    <div class="container">
+      <h2>Category Statistics</h2>
+      <div id="cat-stats" class="metrics-grid"></div>
+    </div>
+
+    <!-- specifications -->
+    <div class="container" id="specs-section" class="hidden">
+      <h2>Product Specifications</h2>
+      <div class="glass-card table-card">
+        <table id="specs-table" class="perf-table">
+          <thead>
+            <tr>
+              <th>Attribute</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody id="specs-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </section>
+
+  <footer class="footer">
+    <p>PriceOracle &mdash; built with Flask, Chart.js, scikit-learn, XGBoost &amp; real Flipkart data</p>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=3"></script>
+</body>
+
+</html>

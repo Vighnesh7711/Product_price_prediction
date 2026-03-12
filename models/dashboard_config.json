@@ -1,0 +1,36 @@
+{
+  "total_products": 20002,
+  "total_categories": 266,
+  "date_range": {
+    "start": "2025-05-01",
+    "end": "2026-01-31"
+  },
+  "top_categories": [
+    "Clothing",
+    "Jewellery",
+    "Footwear",
+    "Mobiles & Accessories",
+    "Automotive",
+    "Home Decor & Festive Needs",
+    "Beauty and Personal Care",
+    "Home Furnishing",
+    "Kitchen & Dining",
+    "Computers",
+    "Watches",
+    "Baby Care",
+    "Tools & Hardware",
+    "Toys & School Supplies",
+    "Pens & Stationery",
+    "Bags, Wallets & Belts",
+    "Furniture",
+    "Sports & Fitness",
+    "Cameras & Accessories",
+    "Home Improvement",
+    "Health & Personal Care Appliances",
+    "Sunglasses",
+    "Gaming",
+    "Pet Supplies",
+    "Home & Kitchen"
+  ],
+  "total_price_dates": 276
+}

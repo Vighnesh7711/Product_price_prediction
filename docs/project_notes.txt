@@ -1,0 +1,2229 @@
+﻿* 📓 Notebook 2: 02_Data_Cleaning_and_Preprocessing.ipynb
+* Cell 1 - Title (Markdown)
+* Markdown
+# 🧹 02 - Data Cleaning and Preprocessing
+## Product Price Prediction Project
+**Week 1-2 | Unit I**
+
+
+### Tasks:
+1. ✅ Handle missing values (price, rating, reviews)
+2. ✅ Remove duplicates
+3. ✅ Clean currency symbols (₹, commas)
+4. ✅ Outlier detection (IQR on price)
+5. ✅ Encode categorical columns (brand, category)
+6. ✅ Handle empty rating columns
+7. ✅ Save cleaned data
+
+
+* ---
+________________
+* * Cell 2 - Import Libraries
+* Python
+# ====================================
+# IMPORT LIBRARIES
+# ====================================
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import LabelEncoder
+import warnings
+import os
+import pickle
+import re
+
+
+# Settings
+warnings.filterwarnings('ignore')
+pd.set_option('display.max_columns', None)
+pd.set_option('display.float_format', '{:.2f}'.format)
+
+
+# Plot style
+plt.style.use('seaborn-v0_8-whitegrid')
+
+
+* print("✅ Libraries imported successfully!")
+________________
+* * Cell 3 - Load Data
+* Python
+# ====================================
+# LOAD DATA FROM NOTEBOOK 01
+# ====================================
+df = pd.read_csv('../data/processed/01_raw_snapshot.csv')
+
+
+print("=" * 60)
+print("✅ DATA LOADED FROM NOTEBOOK 01")
+print("=" * 60)
+print(f"📊 Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
+print(f"📊 Missing Values: {df.isnull().sum().sum():,}")
+* print(f"📊 Duplicates: {df.duplicated().sum():,}")
+________________
+* * Cell 4 - View Current State
+* Python
+# ====================================
+# CURRENT DATA STATE
+# ====================================
+* df.head()
+________________
+* * Cell 5 - Cleaning Plan (Markdown)
+* Markdown
+## 🎯 Data Cleaning Plan
+
+
+| Step | Task | Columns Affected |
+|------|------|------------------|
+| 1 | Remove unnecessary columns | product_url, images, crawl_timestamp |
+| 2 | Handle missing values | All columns |
+| 3 | Remove duplicates | Full dataset |
+| 4 | Clean price columns | retail_price, discounted_price |
+| 5 | Handle empty ratings | product_rating, overall_rating |
+| 6 | Extract main category | product_category_tree |
+| 7 | Encode categorical | brand, category |
+* | 8 | Detect & handle outliers | discounted_price |
+________________
+* * Cell 6 - Step 1: Remove Unnecessary Columns
+* Python
+# ====================================
+# STEP 1: REMOVE UNNECESSARY COLUMNS
+# ====================================
+print("=" * 60)
+print("STEP 1: REMOVING UNNECESSARY COLUMNS")
+print("=" * 60)
+
+
+# Columns to drop
+columns_to_drop = ['product_url', 'images', 'crawl_timestamp']
+
+
+print(f"📊 Columns BEFORE: {df.shape[1]}")
+
+
+# Drop columns if they exist
+for col in columns_to_drop:
+    if col in df.columns:
+        df.drop(columns=[col], inplace=True)
+        print(f"   ❌ Dropped: {col}")
+
+
+print(f"\n📊 Columns AFTER: {df.shape[1]}")
+* print(f"✅ Remaining columns: {df.columns.tolist()}")
+________________
+* * Cell 7 - Step 2: Check Missing Values
+* Python
+# ====================================
+# STEP 2: CHECK MISSING VALUES
+# ====================================
+print("=" * 60)
+print("STEP 2: MISSING VALUES - BEFORE CLEANING")
+print("=" * 60)
+
+
+missing = df.isnull().sum()
+missing_pct = (missing / len(df)) * 100
+
+
+missing_df = pd.DataFrame({
+    'Column': missing.index,
+    'Missing': missing.values,
+    'Percentage': missing_pct.values
+}).sort_values('Missing', ascending=False)
+
+
+* print(missing_df.to_string(index=False))
+________________
+* * Cell 8 - Handle Missing Ratings (Special Case)
+* Python
+# ====================================
+# HANDLE EMPTY RATING COLUMNS
+# ====================================
+print("=" * 60)
+print("HANDLING RATING COLUMNS (Mostly Empty)")
+print("=" * 60)
+
+
+# Check rating columns
+rating_cols = ['product_rating', 'overall_rating']
+
+
+for col in rating_cols:
+    if col in df.columns:
+        missing_pct = (df[col].isnull().sum() / len(df)) * 100
+        print(f"\n📊 {col}:")
+        print(f"   Missing: {df[col].isnull().sum():,} ({missing_pct:.1f}%)")
+        
+        # If more than 50% missing - OPTION 1: Fill with 0 or median
+        # OPTION 2: Drop column if too many missing
+        
+        if missing_pct > 80:
+            print(f"   ⚠️ Very high missing ({missing_pct:.1f}%) - Filling with 0")
+            df[col] = df[col].fillna(0)
+        elif missing_pct > 50:
+            print(f"   ⚠️ High missing ({missing_pct:.1f}%) - Filling with median")
+            df[col] = df[col].fillna(df[col].median())
+        else:
+            print(f"   ✅ Acceptable missing - Filling with median")
+            df[col] = df[col].fillna(df[col].median())
+
+
+* print("\n✅ Rating columns handled!")
+________________
+* * Cell 9 - Handle Other Missing Values
+* Python
+# ====================================
+# HANDLE OTHER MISSING VALUES
+# ====================================
+print("=" * 60)
+print("HANDLING OTHER MISSING VALUES")
+print("=" * 60)
+
+
+# Numerical columns - fill with median
+numerical_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+
+for col in numerical_cols:
+    if df[col].isnull().sum() > 0:
+        median_val = df[col].median()
+        df[col].fillna(median_val, inplace=True)
+        print(f"✅ {col}: Filled {df[col].isnull().sum()} values with median ({median_val:.2f})")
+
+
+# Categorical columns - fill with mode or 'Unknown'
+categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+
+
+for col in categorical_cols:
+    if df[col].isnull().sum() > 0:
+        # Fill with 'Unknown' for brand, mode for others
+        if col == 'brand':
+            df[col].fillna('Unknown', inplace=True)
+            print(f"✅ {col}: Filled with 'Unknown'")
+        else:
+            mode_val = df[col].mode()[0] if len(df[col].mode()) > 0 else 'Unknown'
+            df[col].fillna(mode_val, inplace=True)
+            print(f"✅ {col}: Filled with mode")
+
+
+print("\n📊 Missing values AFTER:")
+* print(f"   Total: {df.isnull().sum().sum()}")
+________________
+* * Cell 10 - Step 3: Remove Duplicates
+* Python
+# ====================================
+# STEP 3: REMOVE DUPLICATES
+# ====================================
+print("=" * 60)
+print("STEP 3: REMOVING DUPLICATES")
+print("=" * 60)
+
+
+print(f"📊 Rows BEFORE: {len(df):,}")
+print(f"📊 Duplicates found: {df.duplicated().sum():,}")
+
+
+# Remove duplicates
+df.drop_duplicates(inplace=True)
+df.reset_index(drop=True, inplace=True)
+
+
+print(f"📊 Rows AFTER: {len(df):,}")
+* print(f"✅ Duplicates removed!")
+________________
+* * Cell 11 - Step 4: Clean Price Columns (Title)
+* Markdown
+## 💰 Step 4: Clean Price Columns
+* Remove currency symbols (₹), commas, and convert to numeric
+________________
+* * Cell 12 - Price Cleaning Function
+* Python
+# ====================================
+# PRICE CLEANING FUNCTION
+# ====================================
+def clean_price(value):
+    """
+    Clean price values by removing:
+    - Currency symbols (₹, $, Rs, Rs.)
+    - Commas
+    - Spaces
+    - Any non-numeric characters
+    
+    Returns: float or NaN
+    """
+    if pd.isna(value):
+        return np.nan
+    
+    # If already numeric
+    if isinstance(value, (int, float)):
+        return float(value)
+    
+    # Convert to string and clean
+    if isinstance(value, str):
+        # Remove common currency symbols and text
+        value = value.replace('₹', '')
+        value = value.replace('$', '')
+        value = value.replace('Rs', '')
+        value = value.replace('Rs.', '')
+        value = value.replace('INR', '')
+        value = value.replace(',', '')
+        value = value.replace(' ', '')
+        value = value.strip()
+        
+        # Try to convert to float
+        try:
+            return float(value)
+        except ValueError:
+            # Extract numbers using regex
+            numbers = re.findall(r'[\d.]+', value)
+            if numbers:
+                return float(numbers[0])
+            return np.nan
+    
+    return np.nan
+
+
+# Test the function
+print("Testing clean_price function:")
+test_values = ['₹1,299', '₹ 15,999', 'Rs.999', '2500', 1500.50, None]
+for val in test_values:
+*     print(f"   '{val}' → {clean_price(val)}")
+________________
+* * Cell 13 - Apply Price Cleaning
+* Python
+# ====================================
+# APPLY PRICE CLEANING
+# ====================================
+print("=" * 60)
+print("STEP 4: CLEANING PRICE COLUMNS")
+print("=" * 60)
+
+
+price_columns = ['retail_price', 'discounted_price']
+
+
+for col in price_columns:
+    if col in df.columns:
+        print(f"\n📊 Cleaning: {col}")
+        print(f"   Type BEFORE: {df[col].dtype}")
+        print(f"   Sample BEFORE: {df[col].head(3).tolist()}")
+        
+        # Apply cleaning
+        df[col] = df[col].apply(clean_price)
+        
+        print(f"   Type AFTER: {df[col].dtype}")
+        print(f"   Sample AFTER: {df[col].head(3).tolist()}")
+        print(f"   ✅ Done!")
+
+
+# Fill any NaN in price with median
+for col in price_columns:
+    if col in df.columns and df[col].isnull().sum() > 0:
+        median_price = df[col].median()
+        df[col].fillna(median_price, inplace=True)
+*         print(f"\n   Filled {col} NaN with median: ₹{median_price:,.2f}")
+________________
+* * Cell 14 - Verify Price Columns
+* Python
+# ====================================
+# VERIFY PRICE COLUMNS
+# ====================================
+print("=" * 60)
+print("PRICE COLUMNS - AFTER CLEANING")
+print("=" * 60)
+
+
+for col in price_columns:
+    if col in df.columns:
+        print(f"\n📊 {col}:")
+        print(f"   Min: ₹{df[col].min():,.2f}")
+        print(f"   Max: ₹{df[col].max():,.2f}")
+        print(f"   Mean: ₹{df[col].mean():,.2f}")
+        print(f"   Median: ₹{df[col].median():,.2f}")
+*         print(f"   Missing: {df[col].isnull().sum()}")
+________________
+* * Cell 15 - Step 5: Outlier Detection (Title)
+* Markdown
+## 📊 Step 5: Outlier Detection (IQR Method)
+* Detect outliers in discounted_price using IQR method
+________________
+* * Cell 16 - Outlier Detection Function
+* Python
+# ====================================
+# OUTLIER DETECTION FUNCTION
+# ====================================
+def detect_outliers_iqr(data, column):
+    """
+    Detect outliers using IQR (Interquartile Range) method
+    
+    Outlier = value < Q1 - 1.5*IQR or value > Q3 + 1.5*IQR
+    """
+    Q1 = data[column].quantile(0.25)
+    Q3 = data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    outliers = data[(data[column] < lower_bound) | (data[column] > upper_bound)]
+    
+    return outliers, lower_bound, upper_bound, Q1, Q3, IQR
+
+
+# Apply to target variable
+TARGET = 'discounted_price'
+
+
+outliers, lower, upper, Q1, Q3, IQR = detect_outliers_iqr(df, TARGET)
+
+
+print("=" * 60)
+print(f"OUTLIER DETECTION - {TARGET}")
+print("=" * 60)
+print(f"📊 Q1 (25th percentile): ₹{Q1:,.2f}")
+print(f"📊 Q3 (75th percentile): ₹{Q3:,.2f}")
+print(f"📊 IQR (Q3 - Q1): ₹{IQR:,.2f}")
+print(f"\n📊 Lower Bound: ₹{lower:,.2f}")
+print(f"📊 Upper Bound: ₹{upper:,.2f}")
+print(f"\n🔴 Outliers Found: {len(outliers):,}")
+* print(f"📊 Percentage: {(len(outliers)/len(df))*100:.2f}%")
+________________
+* * Cell 17 - Visualize Outliers
+* Python
+# ====================================
+# VISUALIZE OUTLIERS
+# ====================================
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+
+# 1. Boxplot BEFORE handling
+axes[0, 0].boxplot(df[TARGET].dropna())
+axes[0, 0].set_title(f'Boxplot of {TARGET}\n(Before Handling)', fontsize=12)
+axes[0, 0].set_ylabel('Price (₹)')
+
+
+# 2. Histogram with bounds
+axes[0, 1].hist(df[TARGET].dropna(), bins=50, edgecolor='black', alpha=0.7, color='steelblue')
+axes[0, 1].axvline(lower, color='red', linestyle='--', linewidth=2, label=f'Lower: ₹{lower:,.0f}')
+axes[0, 1].axvline(upper, color='red', linestyle='--', linewidth=2, label=f'Upper: ₹{upper:,.0f}')
+axes[0, 1].axvline(df[TARGET].median(), color='green', linestyle='-', linewidth=2, label=f'Median: ₹{df[TARGET].median():,.0f}')
+axes[0, 1].set_title(f'Distribution of {TARGET}', fontsize=12)
+axes[0, 1].set_xlabel('Price (₹)')
+axes[0, 1].legend()
+
+
+# 3. Retail vs Discounted Price
+axes[1, 0].scatter(df['retail_price'], df['discounted_price'], alpha=0.3, s=10)
+axes[1, 0].set_xlabel('Retail Price (₹)')
+axes[1, 0].set_ylabel('Discounted Price (₹)')
+axes[1, 0].set_title('Retail Price vs Discounted Price', fontsize=12)
+
+
+# 4. Price distribution by log scale
+axes[1, 1].hist(np.log1p(df[TARGET].dropna()), bins=50, edgecolor='black', alpha=0.7, color='coral')
+axes[1, 1].set_title(f'Log Distribution of {TARGET}', fontsize=12)
+axes[1, 1].set_xlabel('Log(Price + 1)')
+
+
+plt.tight_layout()
+
+
+# Save figure
+os.makedirs('../reports/figures', exist_ok=True)
+plt.savefig('../reports/figures/outlier_analysis.png', dpi=300, bbox_inches='tight')
+print("✅ Figure saved: reports/figures/outlier_analysis.png")
+
+
+* plt.show()
+________________
+* * Cell 18 - Handle Outliers
+* Python
+# ====================================
+# HANDLE OUTLIERS
+# ====================================
+print("=" * 60)
+print("HANDLING OUTLIERS")
+print("=" * 60)
+
+
+print(f"📊 Shape BEFORE: {df.shape}")
+print(f"📊 Price range BEFORE: ₹{df[TARGET].min():,.2f} - ₹{df[TARGET].max():,.2f}")
+
+
+# METHOD: Cap outliers (Winsorization) - Recommended
+# This keeps all data but limits extreme values
+
+
+df[TARGET] = df[TARGET].clip(lower=max(0, lower), upper=upper)
+
+
+# Also cap retail_price
+if 'retail_price' in df.columns:
+    retail_lower = df['retail_price'].quantile(0.25) - 1.5 * (df['retail_price'].quantile(0.75) - df['retail_price'].quantile(0.25))
+    retail_upper = df['retail_price'].quantile(0.75) + 1.5 * (df['retail_price'].quantile(0.75) - df['retail_price'].quantile(0.25))
+    df['retail_price'] = df['retail_price'].clip(lower=max(0, retail_lower), upper=retail_upper)
+
+
+print(f"\n📊 Shape AFTER: {df.shape}")
+print(f"📊 Price range AFTER: ₹{df[TARGET].min():,.2f} - ₹{df[TARGET].max():,.2f}")
+* print("\n✅ Outliers capped using Winsorization method!")
+________________
+* * Cell 19 - Step 6: Extract Main Category
+* Python
+# ====================================
+# STEP 6: EXTRACT MAIN CATEGORY
+# ====================================
+print("=" * 60)
+print("STEP 6: EXTRACT MAIN CATEGORY")
+print("=" * 60)
+
+
+# product_category_tree looks like: "Category1 >> SubCategory1 >> SubCategory2"
+
+
+if 'product_category_tree' in df.columns:
+    print("📊 Sample category tree:")
+    print(df['product_category_tree'].head(3).tolist())
+    
+    # Extract main category (first level)
+    def extract_main_category(category_tree):
+        if pd.isna(category_tree):
+            return 'Unknown'
+        
+        # Split by '>>' and take first part
+        parts = str(category_tree).split('>>')
+        main_cat = parts[0].strip()
+        
+        # Clean up
+        main_cat = main_cat.replace('[', '').replace(']', '').replace('"', '')
+        
+        return main_cat if main_cat else 'Unknown'
+    
+    # Apply extraction
+    df['main_category'] = df['product_category_tree'].apply(extract_main_category)
+    
+    print(f"\n📊 Unique main categories: {df['main_category'].nunique()}")
+    print(f"\n📊 Top 10 categories:")
+*     print(df['main_category'].value_counts().head(10))
+________________
+* * Cell 20 - Step 7: Encode Categorical Columns (Title)
+* Markdown
+## 🔢 Step 7: Encode Categorical Columns
+* Encode brand and category using Label Encoding
+________________
+* * Cell 21 - View Categorical Columns
+* Python
+# ====================================
+# VIEW CATEGORICAL COLUMNS
+# ====================================
+print("=" * 60)
+print("CATEGORICAL COLUMNS SUMMARY")
+print("=" * 60)
+
+
+categorical_cols = ['brand', 'main_category']
+
+
+for col in categorical_cols:
+    if col in df.columns:
+        print(f"\n📊 {col}:")
+        print(f"   Unique values: {df[col].nunique():,}")
+        print(f"   Missing: {df[col].isnull().sum()}")
+        print(f"   Top 5:")
+        for cat, count in df[col].value_counts().head(5).items():
+*             print(f"      {cat}: {count:,}")
+________________
+* * Cell 22 - Apply Label Encoding
+* Python
+# ====================================
+# APPLY LABEL ENCODING
+# ====================================
+print("=" * 60)
+print("STEP 7: LABEL ENCODING")
+print("=" * 60)
+
+
+# Store encoders for later use
+label_encoders = {}
+
+
+# Columns to encode
+columns_to_encode = ['brand', 'main_category']
+
+
+for col in columns_to_encode:
+    if col in df.columns:
+        # Create encoder
+        le = LabelEncoder()
+        
+        # Create new encoded column
+        new_col = f'{col}_encoded'
+        df[new_col] = le.fit_transform(df[col].astype(str))
+        
+        # Store encoder
+        label_encoders[col] = le
+        
+        print(f"\n✅ Encoded: {col} → {new_col}")
+        print(f"   Unique classes: {len(le.classes_)}")
+        print(f"   Sample mapping (first 5):")
+        for i, cls in enumerate(le.classes_[:5]):
+            print(f"      '{cls}' → {i}")
+        if len(le.classes_) > 5:
+*             print(f"      ... and {len(le.classes_) - 5} more")
+________________
+* * Cell 23 - Save Label Encoders
+* Python
+# ====================================
+# SAVE LABEL ENCODERS
+# ====================================
+os.makedirs('../models', exist_ok=True)
+
+
+with open('../models/label_encoders.pkl', 'wb') as f:
+    pickle.dump(label_encoders, f)
+
+
+print("✅ Label encoders saved: models/label_encoders.pkl")
+* print(f"📊 Encoders saved for: {list(label_encoders.keys())}")
+________________
+* * Cell 24 - Create Discount Feature
+* Python
+# ====================================
+# BONUS: CREATE DISCOUNT FEATURES
+# ====================================
+print("=" * 60)
+print("CREATING ADDITIONAL FEATURES")
+print("=" * 60)
+
+
+# Calculate discount amount
+if 'retail_price' in df.columns and 'discounted_price' in df.columns:
+    df['discount_amount'] = df['retail_price'] - df['discounted_price']
+    print("✅ Created: discount_amount")
+    
+    # Calculate discount percentage
+    df['discount_percentage'] = ((df['retail_price'] - df['discounted_price']) / df['retail_price']) * 100
+    df['discount_percentage'] = df['discount_percentage'].clip(0, 100)  # Clip to valid range
+    print("✅ Created: discount_percentage")
+    
+    print(f"\n📊 Discount Statistics:")
+    print(f"   Average discount: ₹{df['discount_amount'].mean():,.2f}")
+*     print(f"   Average discount %: {df['discount_percentage'].mean():.1f}%")
+________________
+* * Cell 25 - Final Data Summary
+* Python
+# ====================================
+# FINAL DATA SUMMARY
+# ====================================
+print("=" * 60)
+print("FINAL CLEANED DATA SUMMARY")
+print("=" * 60)
+
+
+print(f"\n📊 Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
+
+
+print(f"\n📊 Columns:")
+for i, col in enumerate(df.columns, 1):
+    dtype = df[col].dtype
+    missing = df[col].isnull().sum()
+    print(f"   {i:2}. {col:<25} | {str(dtype):<10} | Missing: {missing}")
+
+
+print(f"\n📊 Missing Values: {df.isnull().sum().sum()}")
+print(f"📊 Duplicates: {df.duplicated().sum()}")
+* print(f"📊 Memory Usage: {df.memory_usage(deep=True).sum() / (1024*1024):.2f} MB")
+________________
+* * Cell 26 - View Final Data
+* Python
+# ====================================
+# VIEW FINAL CLEANED DATA
+# ====================================
+print("=" * 60)
+print("FINAL CLEANED DATA - SAMPLE")
+print("=" * 60)
+* df.head(10)
+________________
+* * Cell 27 - Save Cleaned Data
+* Python
+# ====================================
+# SAVE CLEANED DATA
+# ====================================
+output_path = '../data/processed/02_cleaned_data.csv'
+
+
+df.to_csv(output_path, index=False)
+
+
+print("=" * 60)
+print("✅ CLEANED DATA SAVED!")
+print("=" * 60)
+print(f"📁 Location: {output_path}")
+print(f"📊 Rows: {df.shape[0]:,}")
+* print(f"📊 Columns: {df.shape[1]}")
+________________
+* * Cell 28 - Final Summary
+* Python
+# ====================================
+# NOTEBOOK 02 COMPLETION SUMMARY
+# ====================================
+print("=" * 60)
+print("📋 NOTEBOOK 02 COMPLETED!")
+print("=" * 60)
+print("""
+✅ TASKS COMPLETED:
+──────────────────────────────────────────────────
+1. ✅ Removed unnecessary columns (product_url, images, crawl_timestamp)
+2. ✅ Handled missing values
+   • Rating columns (mostly empty) → Filled with 0
+   • Numerical columns → Filled with median
+   • Categorical columns → Filled with mode/Unknown
+3. ✅ Removed duplicate rows
+4. ✅ Cleaned price columns (removed ₹, commas)
+5. ✅ Detected outliers using IQR method
+6. ✅ Handled outliers (Winsorization/Capping)
+7. ✅ Extracted main category from category tree
+8. ✅ Encoded categorical columns (Label Encoding)
+   • brand → brand_encoded
+   • main_category → main_category_encoded
+9. ✅ Created additional features
+   • discount_amount
+   • discount_percentage
+
+
+📁 FILES CREATED:
+──────────────────────────────────────────────────
+• data/processed/02_cleaned_data.csv
+• models/label_encoders.pkl
+• reports/figures/outlier_analysis.png
+
+
+➡️ NEXT: Proceed to Notebook 03 - Exploratory Data Analysis
+* """)
+________________
+* * 📁 Final Project Structure
+* text
+product-price-prediction-using-ml/
+│
+├── 📓 notebooks/
+│   ├── 01_Data_Collection_and_Loading.ipynb    ✅
+│   └── 02_Data_Cleaning_and_Preprocessing.ipynb ✅
+│
+├── 📂 data/
+│   ├── raw/
+│   │   └── product_data.csv                    ← Your original data
+│   └── processed/
+│       ├── 01_raw_snapshot.csv                 ← Created by NB01
+│       └── 02_cleaned_data.csv                 ← Created by NB02
+│
+├── 📂 models/
+│   └── label_encoders.pkl                      ← Created by NB02
+│
+└── 📂 reports/
+    └── figures/
+*         └── outlier_analysis.png                ← Created by NB02
+________________
+* * ✅ Quick Checklist
+Step
+	Task
+	Status
+	1
+	Import libraries
+	⬜
+	2
+	Load data
+	⬜
+	3
+	Remove unnecessary columns
+	⬜
+	4
+	Handle missing ratings (fill with 0)
+	⬜
+	5
+	Handle other missing values
+	⬜
+	6
+	Remove duplicates
+	⬜
+	7
+	Clean price columns (₹, commas)
+	⬜
+	8
+	Detect outliers (IQR)
+	⬜
+	9
+	Handle outliers (cap/winsorize)
+	⬜
+	10
+	Extract main category
+	⬜
+	11
+	Encode brand & category
+	⬜
+	12
+	Save cleaned data
+	⬜
+	* I have unic ID crawl Einstein product URL product name product category tree product ID retail price discount price images description product rating over a greeting brand product specifications price from 5th May 2025 to 1 January 2026 and these many columns I have no tell me what to do how to perform data cleaning using python and process the data which I have mentioned using python and Jupiter notebook oooye i am doing all this using python and jupyter notebook give me commands product-price-prediction-using-ml/
+│
+├── 📓 notebooks/ # ALL ML WORK (JUPYTER)
+│ │
+│ ├── 01_Data_Collection_and_Loading.ipynb # Week 1 | Unit I
+│ │ # Tasks:
+│ │ # - Import pandas, numpy
+│ │ # - Load product_data.csv (Flipkart/Amazon/Kaggle)
+│ │ # - Load historical_price_data.csv (optional)
+│ │ # - Initial exploration (.info(), .describe(), .head())
+│ │ # - Identify target variable (price)
+│ │ # - Check missing values & duplicates
+│ │ # - Save raw snapshot to data/processed/
+│
+│ ├── 02_Data_Cleaning_and_Preprocessing.ipynb # Week 1–2 | Unit I
+│ │ # Tasks:
+│ │ # - Handle missing values (price, rating, reviews)
+│ │ # - Remove duplicates
+│ │ # - Clean currency symbols (₹, commas)
+│ │ # - Outlier detection (IQR on price)
+│ │ # - Encode categorical columns:
+│ │ # * brand
+│ │ # * category
+│ │ # - Save cleaned_data.csv ..............................and also telling you product rating and overall rating mostly contain nothing means no rating
+* claude-opus-4-5-20251101-thinking-32k
+* Thought for 1 second
+* 🐍 Product Price Prediction - Jupyter Notebook Guide
+* 📌 Step 1: Open Jupyter Notebook
+* Bash
+# In terminal/command prompt
+   * jupyter notebook
+________________
+   *    * 📓 Notebook 1: 01_Data_Collection_and_Loading.ipynb
+   * Create new notebook → Rename it → Add these cells:
+________________
+   *    * Cell 1 - Title (Markdown)
+   * Markdown
+# 📊 01 - Data Collection and Loading
+**Week 1 | Unit I**
+
+
+   * ---
+________________
+   *    * Cell 2 - Import Libraries
+   * Python
+# Import required libraries
+import pandas as pd
+import numpy as np
+import warnings
+warnings.filterwarnings('ignore')
+
+
+print("✅ Libraries imported successfully!")
+print(f"Pandas version: {pd.__version__}")
+   * print(f"NumPy version: {np.__version__}")
+________________
+   *    * Cell 3 - Load Product Data
+   * Python
+# Load the main product dataset
+# Option 1: From local file
+df = pd.read_csv('../data/raw/product_data.csv')
+
+
+# Option 2: From Kaggle URL (example)
+# df = pd.read_csv('https://raw.githubusercontent.com/..../product_data.csv')
+
+
+print(f"✅ Dataset loaded successfully!")
+print(f"📊 Rows: {df.shape[0]}")
+   * print(f"📊 Columns: {df.shape[1]}")
+________________
+   *    * Cell 4 - Load Historical Data (Optional)
+   * Python
+# Load historical price data (if available)
+try:
+    df_historical = pd.read_csv('../data/raw/historical_price_data.csv')
+    print(f"✅ Historical data loaded: {df_historical.shape}")
+except FileNotFoundError:
+    print("⚠️ Historical data not found - skipping")
+   *     df_historical = None
+________________
+   *    * Cell 5 - View First Rows
+   * Python
+# Display first 5 rows
+print("="*50)
+print("FIRST 5 ROWS")
+print("="*50)
+   * df.head()
+________________
+   *    * Cell 6 - Dataset Info
+   * Python
+# Dataset information
+print("="*50)
+print("DATASET INFO")
+print("="*50)
+   * df.info()
+________________
+   *    * Cell 7 - Statistical Summary
+   * Python
+# Statistical summary
+print("="*50)
+print("STATISTICAL SUMMARY")
+print("="*50)
+   * df.describe()
+________________
+   *    * Cell 8 - Column Names
+   * Python
+# List all columns
+print("="*50)
+print("ALL COLUMNS")
+print("="*50)
+for i, col in enumerate(df.columns, 1):
+   *     print(f"{i}. {col}")
+________________
+   *    * Cell 9 - Identify Target Variable
+   * Python
+# Identify target variable (PRICE)
+# Change column name based on your dataset
+TARGET = 'price'  # or 'selling_price', 'actual_price', 'discounted_price'
+
+
+print("="*50)
+print(f"TARGET VARIABLE: {TARGET}")
+print("="*50)
+print(f"\n📊 Target Statistics:")
+print(df[TARGET].describe())
+
+
+print(f"\n📊 Sample values:")
+   * print(df[TARGET].head(10))
+________________
+   *    * Cell 10 - Check Missing Values
+   * Python
+# Check missing values
+print("="*50)
+print("MISSING VALUES")
+print("="*50)
+
+
+missing = df.isnull().sum()
+missing_pct = (missing / len(df)) * 100
+
+
+missing_df = pd.DataFrame({
+    'Column': missing.index,
+    'Missing Count': missing.values,
+    'Missing %': missing_pct.values
+})
+
+
+# Show only columns with missing values
+missing_df = missing_df[missing_df['Missing Count'] > 0]
+missing_df = missing_df.sort_values('Missing Count', ascending=False)
+
+
+if len(missing_df) > 0:
+    print(missing_df.to_string(index=False))
+else:
+    print("✅ No missing values found!")
+
+
+   * print(f"\n📊 Total Missing Values: {df.isnull().sum().sum()}")
+________________
+   *    * Cell 11 - Check Duplicates
+   * Python
+# Check duplicate rows
+print("="*50)
+print("DUPLICATE ROWS")
+print("="*50)
+
+
+duplicates = df.duplicated().sum()
+print(f"📊 Duplicate rows: {duplicates}")
+   * print(f"📊 Percentage: {(duplicates/len(df))*100:.2f}%")
+________________
+   *    * Cell 12 - Data Types Summary
+   * Python
+# Data types summary
+print("="*50)
+print("DATA TYPES SUMMARY")
+print("="*50)
+
+
+dtype_counts = df.dtypes.value_counts()
+print(dtype_counts)
+
+
+print("\n📊 Numerical columns:")
+print(df.select_dtypes(include=[np.number]).columns.tolist())
+
+
+print("\n📊 Categorical columns:")
+   * print(df.select_dtypes(include=['object']).columns.tolist())
+________________
+   *    * Cell 13 - Save Raw Snapshot
+   * Python
+# Save raw data snapshot
+import os
+
+
+# Create directory if not exists
+os.makedirs('../data/processed', exist_ok=True)
+
+
+# Save snapshot
+df.to_csv('../data/processed/01_raw_snapshot.csv', index=False)
+
+
+print("="*50)
+print("✅ Raw snapshot saved!")
+print("📁 Location: data/processed/01_raw_snapshot.csv")
+   * print("="*50)
+________________
+   *    * Cell 14 - Summary
+   * Python
+# Final Summary
+print("="*60)
+print("📋 NOTEBOOK 01 SUMMARY")
+print("="*60)
+print(f"✅ Dataset Shape: {df.shape}")
+print(f"✅ Target Variable: {TARGET}")
+print(f"✅ Missing Values: {df.isnull().sum().sum()}")
+print(f"✅ Duplicates: {df.duplicated().sum()}")
+print(f"✅ Numerical Columns: {len(df.select_dtypes(include=[np.number]).columns)}")
+print(f"✅ Categorical Columns: {len(df.select_dtypes(include=['object']).columns)}")
+print(f"✅ Raw snapshot saved to: data/processed/01_raw_snapshot.csv")
+print("="*60)
+   * print("\n➡️ Proceed to Notebook 02: Data Cleaning")
+________________
+________________
+   *    * 📓 Notebook 2: 02_Data_Cleaning_and_Preprocessing.ipynb
+   * Create new notebook → Rename it → Add these cells:
+________________
+   *    * Cell 1 - Title (Markdown)
+   * Markdown
+# 🧹 02 - Data Cleaning and Preprocessing
+**Week 1-2 | Unit I**
+
+
+   * ---
+________________
+   *    * Cell 2 - Import Libraries
+   * Python
+# Import required libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.preprocessing import LabelEncoder
+import warnings
+import os
+
+
+warnings.filterwarnings('ignore')
+
+
+# Set plot style
+plt.style.use('seaborn-v0_8-whitegrid')
+sns.set_palette("husl")
+
+
+   * print("✅ Libraries imported successfully!")
+________________
+   *    * Cell 3 - Load Data from Notebook 01
+   * Python
+# Load data from previous notebook
+df = pd.read_csv('../data/processed/01_raw_snapshot.csv')
+
+
+print("✅ Data loaded from Notebook 01")
+print(f"📊 Shape: {df.shape}")
+   * df.head()
+________________
+   *    * Cell 4 - Check Current State
+   * Python
+# Check current state of data
+print("="*50)
+print("CURRENT DATA STATE")
+print("="*50)
+print(f"Rows: {df.shape[0]}")
+print(f"Columns: {df.shape[1]}")
+print(f"Missing Values: {df.isnull().sum().sum()}")
+   * print(f"Duplicates: {df.duplicated().sum()}")
+________________
+   *    * Cell 5 - Handle Missing Values (Markdown)
+   * Markdown
+## 2.1 Handle Missing Values
+- Numerical columns → Fill with **median**
+   * - Categorical columns → Fill with **mode**
+________________
+   *    * Cell 6 - Missing Values Before
+   * Python
+# Missing values BEFORE cleaning
+print("="*50)
+print("MISSING VALUES - BEFORE")
+print("="*50)
+
+
+missing_before = df.isnull().sum()
+print(missing_before[missing_before > 0])
+
+
+if missing_before.sum() == 0:
+   *     print("✅ No missing values!")
+________________
+   *    * Cell 7 - Fill Missing Values
+   * Python
+# Handle missing values
+
+
+# 1. Numerical columns - fill with MEDIAN
+numerical_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+
+
+for col in numerical_cols:
+    if df[col].isnull().sum() > 0:
+        median_val = df[col].median()
+        df[col].fillna(median_val, inplace=True)
+        print(f"✅ Filled '{col}' with median: {median_val:.2f}")
+
+
+# 2. Categorical columns - fill with MODE
+categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+
+
+for col in categorical_cols:
+    if df[col].isnull().sum() > 0:
+        mode_val = df[col].mode()[0]
+        df[col].fillna(mode_val, inplace=True)
+        print(f"✅ Filled '{col}' with mode: {mode_val}")
+
+
+print("\n" + "="*50)
+print("MISSING VALUES - AFTER")
+print("="*50)
+   * print(f"Total missing: {df.isnull().sum().sum()}")
+________________
+   *    * Cell 8 - Remove Duplicates (Markdown)
+   * Markdown
+   * ## 2.2 Remove Duplicates
+________________
+   *    * Cell 9 - Remove Duplicates
+   * Python
+# Remove duplicate rows
+print("="*50)
+print("REMOVING DUPLICATES")
+print("="*50)
+
+
+duplicates_before = df.duplicated().sum()
+print(f"Duplicates BEFORE: {duplicates_before}")
+
+
+# Remove duplicates
+df.drop_duplicates(inplace=True)
+df.reset_index(drop=True, inplace=True)
+
+
+duplicates_after = df.duplicated().sum()
+print(f"Duplicates AFTER: {duplicates_after}")
+print(f"Rows removed: {duplicates_before - duplicates_after}")
+   * print(f"New shape: {df.shape}")
+________________
+   *    * Cell 10 - Clean Currency Symbols (Markdown)
+   * Markdown
+   * ## 2.3 Clean Currency Symbols (₹, Commas)
+________________
+   *    * Cell 11 - Clean Price Function
+   * Python
+# Function to clean price columns
+def clean_price(value):
+    """
+    Remove currency symbols and convert to float
+    Handles: ₹, $, commas, spaces
+    """
+    if pd.isna(value):
+        return np.nan
+    
+    if isinstance(value, (int, float)):
+        return float(value)
+    
+    if isinstance(value, str):
+        # Remove common symbols
+        value = value.replace('₹', '')
+        value = value.replace('$', '')
+        value = value.replace(',', '')
+        value = value.replace(' ', '')
+        value = value.strip()
+        
+        try:
+            return float(value)
+        except ValueError:
+            return np.nan
+    
+    return np.nan
+
+
+# Test the function
+print("Testing clean_price function:")
+print(f"'₹1,299' → {clean_price('₹1,299')}")
+print(f"'$99.99' → {clean_price('$99.99')}")
+   * print(f"'1500' → {clean_price('1500')}")
+________________
+   *    * Cell 12 - Apply Price Cleaning
+   * Python
+# Apply cleaning to price columns
+print("="*50)
+print("CLEANING PRICE COLUMNS")
+print("="*50)
+
+
+# List of possible price column names
+price_columns = ['price', 'actual_price', 'discounted_price', 
+                 'selling_price', 'original_price', 'mrp']
+
+
+for col in price_columns:
+    if col in df.columns:
+        print(f"\nCleaning: {col}")
+        print(f"  Before: {df[col].dtype}")
+        
+        # Show sample before
+        print(f"  Sample before: {df[col].head(3).tolist()}")
+        
+        # Apply cleaning
+        df[col] = df[col].apply(clean_price)
+        
+        print(f"  After: {df[col].dtype}")
+        print(f"  Sample after: {df[col].head(3).tolist()}")
+   *         print(f"  ✅ Done!")
+________________
+   *    * Cell 13 - Verify Price Columns
+   * Python
+# Verify price columns
+print("="*50)
+print("PRICE COLUMNS SUMMARY")
+print("="*50)
+
+
+for col in price_columns:
+    if col in df.columns:
+        print(f"\n{col}:")
+   *         print(df[col].describe())
+________________
+   *    * Cell 14 - Outlier Detection (Markdown)
+   * Markdown
+   * ## 2.4 Outlier Detection (IQR Method on Price)
+________________
+   *    * Cell 15 - IQR Outlier Detection
+   * Python
+# Outlier detection using IQR method
+def detect_outliers_iqr(data, column):
+    """
+    Detect outliers using IQR method
+    Returns: outliers dataframe, lower bound, upper bound
+    """
+    Q1 = data[column].quantile(0.25)
+    Q3 = data[column].quantile(0.75)
+    IQR = Q3 - Q1
+    
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    
+    outliers = data[(data[column] < lower_bound) | (data[column] > upper_bound)]
+    
+    return outliers, lower_bound, upper_bound
+
+
+# Set target column
+TARGET = 'price'  # Change if needed
+
+
+# Detect outliers
+outliers, lower, upper = detect_outliers_iqr(df, TARGET)
+
+
+print("="*50)
+print(f"OUTLIER DETECTION - {TARGET}")
+print("="*50)
+print(f"Q1 (25%): ₹{df[TARGET].quantile(0.25):,.2f}")
+print(f"Q3 (75%): ₹{df[TARGET].quantile(0.75):,.2f}")
+print(f"IQR: ₹{df[TARGET].quantile(0.75) - df[TARGET].quantile(0.25):,.2f}")
+print(f"\nLower Bound: ₹{lower:,.2f}")
+print(f"Upper Bound: ₹{upper:,.2f}")
+print(f"\n🔴 Outliers Found: {len(outliers)}")
+   * print(f"📊 Percentage: {(len(outliers)/len(df))*100:.2f}%")
+________________
+   *    * Cell 16 - Visualize Outliers
+   * Python
+# Visualize outliers
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+
+# Boxplot BEFORE
+axes[0].boxplot(df[TARGET].dropna())
+axes[0].set_title(f'Boxplot of {TARGET}\n(Shows Outliers)', fontsize=12)
+axes[0].set_ylabel('Price (₹)')
+
+
+# Histogram with bounds
+axes[1].hist(df[TARGET].dropna(), bins=50, edgecolor='black', alpha=0.7)
+axes[1].axvline(lower, color='red', linestyle='--', linewidth=2, label=f'Lower: ₹{lower:,.0f}')
+axes[1].axvline(upper, color='red', linestyle='--', linewidth=2, label=f'Upper: ₹{upper:,.0f}')
+axes[1].set_title(f'Distribution of {TARGET}\n(Red lines = IQR bounds)', fontsize=12)
+axes[1].set_xlabel('Price (₹)')
+axes[1].set_ylabel('Frequency')
+axes[1].legend()
+
+
+plt.tight_layout()
+
+
+# Save figure
+os.makedirs('../reports/figures', exist_ok=True)
+plt.savefig('../reports/figures/outlier_detection.png', dpi=300, bbox_inches='tight')
+print("✅ Figure saved: reports/figures/outlier_detection.png")
+
+
+   * plt.show()
+________________
+   *    * Cell 17 - Handle Outliers
+   * Python
+# Handle outliers - Choose ONE method
+
+
+print("="*50)
+print("HANDLING OUTLIERS")
+print("="*50)
+
+
+print(f"Shape BEFORE: {df.shape}")
+
+
+# METHOD 1: Remove outliers (uncomment to use)
+# df = df[(df[TARGET] >= lower) & (df[TARGET] <= upper)]
+# print("Method: Removed outliers")
+
+
+# METHOD 2: Cap outliers (Winsorization) - RECOMMENDED
+df[TARGET] = df[TARGET].clip(lower=lower, upper=upper)
+print("Method: Capped outliers (Winsorization)")
+
+
+print(f"Shape AFTER: {df.shape}")
+print(f"\nNew {TARGET} range:")
+print(f"  Min: ₹{df[TARGET].min():,.2f}")
+   * print(f"  Max: ₹{df[TARGET].max():,.2f}")
+________________
+   *    * Cell 18 - Encode Categorical (Markdown)
+   * Markdown
+   * ## 2.5 Encode Categorical Columns (Brand, Category)
+________________
+   *    * Cell 19 - View Categorical Columns
+   * Python
+# View categorical columns
+print("="*50)
+print("CATEGORICAL COLUMNS")
+print("="*50)
+
+
+categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+
+
+for col in categorical_cols:
+    unique_count = df[col].nunique()
+    print(f"\n{col}:")
+    print(f"  Unique values: {unique_count}")
+    if unique_count <= 10:
+        print(f"  Values: {df[col].unique().tolist()}")
+    else:
+   *         print(f"  Top 5: {df[col].value_counts().head().index.tolist()}")
+________________
+   *    * Cell 20 - Label Encoding
+   * Python
+# Label Encoding for categorical columns
+print("="*50)
+print("LABEL ENCODING")
+print("="*50)
+
+
+# Store encoders for later use
+label_encoders = {}
+
+
+# Columns to encode - MODIFY based on your dataset
+columns_to_encode = ['brand', 'category']  # Add more as needed
+
+
+for col in columns_to_encode:
+    if col in df.columns:
+        le = LabelEncoder()
+        
+        # Create new encoded column
+        new_col = f'{col}_encoded'
+        df[new_col] = le.fit_transform(df[col].astype(str))
+        
+        # Store encoder
+        label_encoders[col] = le
+        
+        print(f"\n✅ Encoded: {col} → {new_col}")
+        print(f"   Classes: {len(le.classes_)}")
+        print(f"   Sample mapping:")
+        for i, cls in enumerate(le.classes_[:5]):
+            print(f"     {cls} → {i}")
+        if len(le.classes_) > 5:
+   *             print(f"     ... and {len(le.classes_)-5} more")
+________________
+   *    * Cell 21 - Save Encoders
+   * Python
+# Save label encoders for future use
+import pickle
+
+
+os.makedirs('../models', exist_ok=True)
+
+
+with open('../models/label_encoders.pkl', 'wb') as f:
+    pickle.dump(label_encoders, f)
+
+
+   * print("✅ Label encoders saved: models/label_encoders.pkl")
+________________
+   *    * Cell 22 - View Encoded Data
+   * Python
+# View encoded data
+print("="*50)
+print("ENCODED DATA PREVIEW")
+print("="*50)
+
+
+# Show original and encoded columns side by side
+for col in columns_to_encode:
+    if col in df.columns:
+        print(f"\n{col} vs {col}_encoded:")
+   *         print(df[[col, f'{col}_encoded']].head(10))
+________________
+   *    * Cell 23 - Final Data Summary
+   * Python
+# Final data summary
+print("="*60)
+print("FINAL CLEANED DATA SUMMARY")
+print("="*60)
+
+
+print(f"\n📊 Shape: {df.shape}")
+print(f"\n📊 Columns ({len(df.columns)}):")
+for i, col in enumerate(df.columns, 1):
+    print(f"   {i}. {col} ({df[col].dtype})")
+
+
+print(f"\n📊 Missing Values: {df.isnull().sum().sum()}")
+print(f"📊 Duplicates: {df.duplicated().sum()}")
+
+
+   * print(f"\n📊 Memory Usage: {df.memory_usage(deep=True).sum() / 1024:.2f} KB")
+________________
+   *    * Cell 24 - Data Types Summary
+   * Python
+# Data types summary
+print("="*50)
+print("DATA TYPES SUMMARY")
+print("="*50)
+
+
+print("\n📊 Numerical columns:")
+num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+for col in num_cols:
+    print(f"   - {col}")
+
+
+print("\n📊 Categorical columns:")
+cat_cols = df.select_dtypes(include=['object']).columns.tolist()
+for col in cat_cols:
+   *     print(f"   - {col}")
+________________
+   *    * Cell 25 - Save Cleaned Data
+   * Python
+# Save cleaned data
+output_path = '../data/processed/02_cleaned_data.csv'
+df.to_csv(output_path, index=False)
+
+
+print("="*60)
+print("✅ CLEANED DATA SAVED!")
+print("="*60)
+print(f"📁 Location: {output_path}")
+print(f"📊 Rows: {df.shape[0]}")
+   * print(f"📊 Columns: {df.shape[1]}")
+________________
+   *    * Cell 26 - Final Summary
+   * Python
+# Notebook completion summary
+print("="*60)
+print("📋 NOTEBOOK 02 COMPLETED!")
+print("="*60)
+print("""
+Tasks Completed:
+✅ 1. Handled missing values (median/mode)
+✅ 2. Removed duplicates
+✅ 3. Cleaned currency symbols (₹, commas)
+✅ 4. Detected outliers (IQR method)
+✅ 5. Handled outliers (capping)
+✅ 6. Encoded categorical columns (Label Encoding)
+✅ 7. Saved cleaned data
+
+
+Files Created:
+📁 data/processed/02_cleaned_data.csv
+📁 models/label_encoders.pkl
+📁 reports/figures/outlier_detection.png
+
+
+➡️ Proceed to Notebook 03: Feature Engineering
+   * """)
+________________
+   *    * 📁 Required Folder Structure
+   * text
+product-price-prediction-using-ml/
+│
+├── 📓 notebooks/
+│   ├── 01_Data_Collection_and_Loading.ipynb
+│   └── 02_Data_Cleaning_and_Preprocessing.ipynb
+│
+├── 📂 data/
+│   ├── raw/
+│   │   └── product_data.csv          ← PUT YOUR DATA HERE
+│   └── processed/
+│       ├── 01_raw_snapshot.csv       ← Created by Notebook 01
+│       └── 02_cleaned_data.csv       ← Created by Notebook 02
+│
+├── 📂 models/
+│   └── label_encoders.pkl            ← Created by Notebook 02
+│
+└── 📂 reports/
+    └── figures/
+   *         └── outlier_detection.png     ← Created by Notebook 02
+________________
+   *    * 🚀 Quick Start Summary
+Step
+	Action
+	1
+	Create folders: data/raw, data/processed, models, reports/figures
+	2
+	Put product_data.csv in data/raw/
+	3
+	Open Jupyter: jupyter notebook
+	4
+	Create & run 01_Data_Collection_and_Loading.ipynb
+	5
+	Create & run 02_Data_Cleaning_and_Preprocessing.ipynb
+	   * oooye i am doing all this using python and jupyter notebook give me commands product-price-prediction-using-ml/
+│
+├── 📓 notebooks/ # ALL ML WORK (JUPYTER)
+│ │
+│ ├── 01_Data_Collection_and_Loading.ipynb # Week 1 | Unit I
+│ │ # Tasks:
+│ │ # - Import pandas, numpy
+│ │ # - Load product_data.csv (Flipkart/Amazon/Kaggle)
+│ │ # - Load historical_price_data.csv (optional)
+│ │ # - Initial exploration (.info(), .describe(), .head())
+│ │ # - Identify target variable (price)
+│ │ # - Check missing values & duplicates
+│ │ # - Save raw snapshot to data/processed/
+│
+│ ├── 02_Data_Cleaning_and_Preprocessing.ipynb # Week 1–2 | Unit I
+│ │ # Tasks:
+│ │ # - Handle missing values (price, rating, reviews)
+│ │ # - Remove duplicates
+│ │ # - Clean currency symbols (₹, commas)
+│ │ # - Outlier detection (IQR on price)
+│ │ # - Encode categorical columns:
+│ │ # * brand
+│ │ # * category
+│ │ # - Save cleaned_data.csv ...............................for all this tell me what to do
+   * claude-opus-4-5-20251101-thinking-32k
+   * Thought for 1 second
+   * 🛠️ Commands for Product Price Prediction ML Project
+   * 📁 Step 1: Create Directory Structure
+   * Bash
+# Create main project directory
+mkdir -p product-price-prediction-using-ml
+
+
+# Navigate to project
+cd product-price-prediction-using-ml
+
+
+# Create all subdirectories
+mkdir -p notebooks
+mkdir -p data/raw
+mkdir -p data/processed
+mkdir -p models
+mkdir -p src
+mkdir -p reports/figures
+      * mkdir -p config
+________________
+      *       * 📓 Step 2: Create Jupyter Notebooks
+      * Notebook 1: Data Collection and Loading
+      * Bash
+cat > notebooks/01_Data_Collection_and_Loading.ipynb << 'EOF'
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 📊 01 - Data Collection and Loading\n",
+    "**Week 1 | Unit I**\n",
+    "\n",
+    "---"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1.1 Import Libraries"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Import required libraries\n",
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import warnings\n",
+    "warnings.filterwarnings('ignore')\n",
+    "\n",
+    "print('Libraries imported successfully!')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1.2 Load Product Data (Flipkart/Amazon/Kaggle)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load the main product dataset\n",
+    "df = pd.read_csv('../data/raw/product_data.csv')\n",
+    "print(f'Dataset loaded: {df.shape[0]} rows, {df.shape[1]} columns')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1.3 Load Historical Price Data (Optional)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Load historical price data if available\n",
+    "try:\n",
+    "    df_historical = pd.read_csv('../data/raw/historical_price_data.csv')\n",
+    "    print(f'Historical data loaded: {df_historical.shape}')\n",
+    "except FileNotFoundError:\n",
+    "    print('Historical price data not found - skipping')\n",
+    "    df_historical = None"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1.4 Initial Data Exploration"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Display first few rows\n",
+    "print('=== First 5 Rows ===')\n",
+    "df.head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Dataset info\n",
+    "print('=== Dataset Info ===')\n",
+    "df.info()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Statistical summary\n",
+    "print('=== Statistical Summary ===')\n",
+    "df.describe()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1.5 Identify Target Variable (Price)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Identify target variable\n",
+    "TARGET = 'price'  # or 'selling_price', 'actual_price'\n",
+    "\n",
+    "print(f'Target Variable: {TARGET}')\n",
+    "print(f'Target Statistics:\\n{df[TARGET].describe()}')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1.6 Check Missing Values & Duplicates"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Check missing values\n",
+    "print('=== Missing Values ===')\n",
+    "missing = df.isnull().sum()\n",
+    "missing_pct = (missing / len(df)) * 100\n",
+    "missing_df = pd.DataFrame({'Missing': missing, 'Percentage': missing_pct})\n",
+    "print(missing_df[missing_df['Missing'] > 0])"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Check duplicates\n",
+    "duplicates = df.duplicated().sum()\n",
+    "print(f'\\n=== Duplicate Rows: {duplicates} ===')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1.7 Save Raw Snapshot"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Save raw data snapshot\n",
+    "df.to_csv('../data/processed/01_raw_snapshot.csv', index=False)\n",
+    "print('Raw snapshot saved to data/processed/01_raw_snapshot.csv')"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.9.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
+EOF
+
+
+      * echo "✅ Created: 01_Data_Collection_and_Loading.ipynb"
+________________
+      *       * Notebook 2: Data Cleaning and Preprocessing
+      * Bash
+cat > notebooks/02_Data_Cleaning_and_Preprocessing.ipynb << 'EOF'
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 🧹 02 - Data Cleaning and Preprocessing\n",
+    "**Week 1-2 | Unit I**\n",
+    "\n",
+    "---"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2.1 Import Libraries and Load Data"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import matplotlib.pyplot as plt\n",
+    "import seaborn as sns\n",
+    "from sklearn.preprocessing import LabelEncoder, OneHotEncoder\n",
+    "import warnings\n",
+    "warnings.filterwarnings('ignore')\n",
+    "\n",
+    "# Load data from previous notebook\n",
+    "df = pd.read_csv('../data/processed/01_raw_snapshot.csv')\n",
+    "print(f'Data loaded: {df.shape}')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2.2 Handle Missing Values (Price, Rating, Reviews)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Check missing values before\n",
+    "print('=== Missing Values BEFORE ===')\n",
+    "print(df.isnull().sum())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Handle missing values\n",
+    "# For numerical columns - use median\n",
+    "numerical_cols = df.select_dtypes(include=[np.number]).columns\n",
+    "for col in numerical_cols:\n",
+    "    if df[col].isnull().sum() > 0:\n",
+    "        df[col].fillna(df[col].median(), inplace=True)\n",
+    "        print(f'Filled {col} with median')\n",
+    "\n",
+    "# For categorical columns - use mode\n",
+    "categorical_cols = df.select_dtypes(include=['object']).columns\n",
+    "for col in categorical_cols:\n",
+    "    if df[col].isnull().sum() > 0:\n",
+    "        df[col].fillna(df[col].mode()[0], inplace=True)\n",
+    "        print(f'Filled {col} with mode')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Verify missing values after\n",
+    "print('\\n=== Missing Values AFTER ===')\n",
+    "print(df.isnull().sum())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2.3 Remove Duplicates"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Check duplicates before\n",
+    "print(f'Duplicates BEFORE: {df.duplicated().sum()}')\n",
+    "\n",
+    "# Remove duplicates\n",
+    "df.drop_duplicates(inplace=True)\n",
+    "df.reset_index(drop=True, inplace=True)\n",
+    "\n",
+    "print(f'Duplicates AFTER: {df.duplicated().sum()}')\n",
+    "print(f'Shape after removing duplicates: {df.shape}')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2.4 Clean Currency Symbols (₹, Commas)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Function to clean price columns\n",
+    "def clean_price(value):\n",
+    "    if pd.isna(value):\n",
+    "        return np.nan\n",
+    "    if isinstance(value, str):\n",
+    "        # Remove currency symbols and commas\n",
+    "        value = value.replace('₹', '')\n",
+    "        value = value.replace('$', '')\n",
+    "        value = value.replace(',', '')\n",
+    "        value = value.replace(' ', '')\n",
+    "        try:\n",
+    "            return float(value)\n",
+    "        except:\n",
+    "            return np.nan\n",
+    "    return float(value)\n",
+    "\n",
+    "# Apply to price columns\n",
+    "price_columns = ['price', 'actual_price', 'discounted_price', 'selling_price']\n",
+    "for col in price_columns:\n",
+    "    if col in df.columns:\n",
+    "        df[col] = df[col].apply(clean_price)\n",
+    "        print(f'Cleaned: {col}')\n",
+    "\n",
+    "print('\\nPrice columns after cleaning:')\n",
+    "df.head()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2.5 Outlier Detection (IQR on Price)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# IQR method for outlier detection\n",
+    "def detect_outliers_iqr(data, column):\n",
+    "    Q1 = data[column].quantile(0.25)\n",
+    "    Q3 = data[column].quantile(0.75)\n",
+    "    IQR = Q3 - Q1\n",
+    "    lower_bound = Q1 - 1.5 * IQR\n",
+    "    upper_bound = Q3 + 1.5 * IQR\n",
+    "    \n",
+    "    outliers = data[(data[column] < lower_bound) | (data[column] > upper_bound)]\n",
+    "    return outliers, lower_bound, upper_bound\n",
+    "\n",
+    "# Detect outliers in price\n",
+    "TARGET = 'price'  # Change if needed\n",
+    "outliers, lower, upper = detect_outliers_iqr(df, TARGET)\n",
+    "\n",
+    "print(f'=== Outlier Detection (IQR Method) ===')\n",
+    "print(f'Lower Bound: {lower:.2f}')\n",
+    "print(f'Upper Bound: {upper:.2f}')\n",
+    "print(f'Number of Outliers: {len(outliers)}')\n",
+    "print(f'Percentage: {(len(outliers)/len(df))*100:.2f}%')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Visualize outliers\n",
+    "fig, axes = plt.subplots(1, 2, figsize=(12, 4))\n",
+    "\n",
+    "# Boxplot\n",
+    "axes[0].boxplot(df[TARGET].dropna())\n",
+    "axes[0].set_title(f'Boxplot of {TARGET}')\n",
+    "\n",
+    "# Histogram\n",
+    "axes[1].hist(df[TARGET].dropna(), bins=50, edgecolor='black')\n",
+    "axes[1].axvline(lower, color='r', linestyle='--', label=f'Lower: {lower:.0f}')\n",
+    "axes[1].axvline(upper, color='r', linestyle='--', label=f'Upper: {upper:.0f}')\n",
+    "axes[1].set_title(f'Distribution of {TARGET}')\n",
+    "axes[1].legend()\n",
+    "\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('../reports/figures/outlier_detection.png', dpi=300)\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Option: Remove or cap outliers\n",
+    "# Method 1: Remove outliers\n",
+    "# df = df[(df[TARGET] >= lower) & (df[TARGET] <= upper)]\n",
+    "\n",
+    "# Method 2: Cap outliers (Winsorization)\n",
+    "df[TARGET] = df[TARGET].clip(lower=lower, upper=upper)\n",
+    "\n",
+    "print(f'Shape after handling outliers: {df.shape}')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2.6 Encode Categorical Columns (Brand, Category)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Check categorical columns\n",
+    "print('=== Categorical Columns ===')\n",
+    "for col in df.select_dtypes(include=['object']).columns:\n",
+    "    print(f'{col}: {df[col].nunique()} unique values')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Label Encoding for brand and category\n",
+    "label_encoders = {}\n",
+    "columns_to_encode = ['brand', 'category']  # Add more as needed\n",
+    "\n",
+    "for col in columns_to_encode:\n",
+    "    if col in df.columns:\n",
+    "        le = LabelEncoder()\n",
+    "        df[f'{col}_encoded'] = le.fit_transform(df[col].astype(str))\n",
+    "        label_encoders[col] = le\n",
+    "        print(f'Encoded: {col} -> {col}_encoded')\n",
+    "\n",
+    "print('\\nEncoded columns preview:')\n",
+    "df.head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Save label encoders for later use\n",
+    "import pickle\n",
+    "\n",
+    "with open('../models/label_encoders.pkl', 'wb') as f:\n",
+    "    pickle.dump(label_encoders, f)\n",
+    "print('Label encoders saved!')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2.7 Save Cleaned Data"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Final data summary\n",
+    "print('=== Final Cleaned Data Summary ===')\n",
+    "print(f'Shape: {df.shape}')\n",
+    "print(f'\\nColumn Types:')\n",
+    "print(df.dtypes)\n",
+    "print(f'\\nMissing Values: {df.isnull().sum().sum()}')"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Save cleaned data\n",
+    "df.to_csv('../data/processed/02_cleaned_data.csv', index=False)\n",
+    "print('\\n✅ Cleaned data saved to: data/processed/02_cleaned_data.csv')"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "name": "python",
+   "version": "3.9.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
+EOF
+
+
+      * echo "✅ Created: 02_Data_Cleaning_and_Preprocessing.ipynb"
+________________
+      *       * 📄 Step 3: Create Supporting Files
+      * Bash
+# Create requirements.txt
+cat > requirements.txt << 'EOF'
+pandas>=1.3.0
+numpy>=1.21.0
+matplotlib>=3.4.0
+seaborn>=0.11.0
+scikit-learn>=0.24.0
+jupyter>=1.0.0
+notebook>=6.4.0
+EOF
+
+
+# Create README.md
+cat > README.md << 'EOF'
+# 🛒 Product Price Prediction using ML
+
+
+      * ## 📁 Project Structure
+      * product-price-prediction-using-ml/
+├── 📓 notebooks/
+│ ├── 01_Data_Collection_and_Loading.ipynb
+│ └── 02_Data_Cleaning_and_Preprocessing.ipynb
+├── 📂 data/
+│ ├── raw/ # Original datasets
+│ └── processed/ # Cleaned datasets
+├── 📂 models/ # Saved models & encoders
+├── 📂 reports/
+│ └── figures/ # Visualizations
+└── 📂 src/ # Python scripts
+      * text
+
+
+## 🚀 Quick Start
+```bash
+pip install -r requirements.txt
+         * jupyter notebook notebooks/
+         * EOF
+         * Create .gitignore
+         * cat > .gitignore << 'EOF'
+pycache/
+.pyc
+.ipynb_checkpoints/
+data/raw/
+!data/raw/.gitkeep
+*.pkl
+.env
+EOF
+         * Create placeholder files
+         * touch data/raw/.gitkeep
+touch data/processed/.gitkeep
+touch models/.gitkeep
+touch reports/figures/.gitkeep
+         * echo "✅ All supporting files created!"
+         * text
+
+
+---
+
+
+## 🚀 Step 4: Final Setup Commands
+
+
+```bash
+# Install dependencies
+pip install pandas numpy matplotlib seaborn scikit-learn jupyter
+
+
+# Launch Jupyter Notebook
+            * jupyter notebook notebooks/
+________________
+            *             * 📋 Complete Single Command (Copy-Paste Ready)
+            * Bash
+            * mkdir -p product-price-prediction-using-ml/{notebooks,data/{raw,processed},models,src,reports/figures,config} && cd product-price-prediction-using-ml && touch data/raw/.gitkeep data/processed/.gitkeep models/.gitkeep reports/figures/.gitkeep && echo "✅ Project structure created!"
+________________
+            *             * ✅ Verification
+            * Bash
+# Check structure
+tree product-price-prediction-using-ml/
+# Or
+            * ls -la product-price-prediction-using-ml/
+            * Output:
+            * text
+product-price-prediction-using-ml/
+├── config/
+├── data/
+│   ├── processed/
+│   └── raw/
+├── models/
+├── notebooks/
+│   ├── 01_Data_Collection_and_Loading.ipynb
+│   └── 02_Data_Cleaning_and_Preprocessing.ipynb
+├── reports/
+│   └── figures/
+├── requirements.txt
+            * └── src/
+            * give me commands product-price-prediction-using-ml/
+│
+├── 📓 notebooks/ # ALL ML WORK (JUPYTER)
+│ │
+│ ├── 01_Data_Collection_and_Loading.ipynb # Week 1 | Unit I
+│ │ # Tasks:
+│ │ # - Import pandas, numpy
+│ │ # - Load product_data.csv (Flipkart/Amazon/Kaggle)
+│ │ # - Load historical_price_data.csv (optional)
+│ │ # - Initial exploration (.info(), .describe(), .head())
+│ │ # - Identify target variable (price)
+│ │ # - Check missing values & duplicates
+│ │ # - Save raw snapshot to data/processed/
+│
+│ ├── 02_Data_Cleaning_and_Preprocessing.ipynb # Week 1–2 | Unit I
+│ │ # Tasks:
+│ │ # - Handle missing values (price, rating, reviews)
+│ │ # - Remove duplicates
+│ │ # - Clean currency symbols (₹, commas)
+│ │ # - Outlier detection (IQR on price)
+│ │ # - Encode categorical columns:
+│ │ # * brand
+│ │ # * category
+│ │ # - Save cleaned_data.csv ...............................for this all
