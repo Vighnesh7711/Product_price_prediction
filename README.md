@@ -96,8 +96,8 @@ Follow these steps to set up the environment and run the project.
 ## 1️⃣ Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/product-price-prediction.git
-cd product-price-prediction
+git clone https://github.com/Vighnesh7711/Product_price_prediction.git
+cd Product_price_prediction
 ````
 
 ---
