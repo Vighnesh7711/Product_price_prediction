@@ -241,22 +241,5 @@ Possible improvements for the project:
 
 ---
 
-# 👨‍💻 Author
 
-**Vighnesh Gawande**
-
-Engineering Student | Aspiring Data Analyst
-
-GitHub:
-[https://github.com/Vighnesh7711](https://github.com/Vighnesh7711)
-
----
-
-# ⭐ Support
-
-If you found this project helpful, please consider **starring the repository** ⭐
-
-```
-
----
 
