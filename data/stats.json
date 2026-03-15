@@ -1,0 +1,49 @@
+{
+  "total_products": 10797,
+  "total_brands": 60,
+  "total_categories": 30,
+  "avg_discount": 40.7,
+  "avg_price": 2068.89,
+  "min_price": 41.0,
+  "max_price": 571230.0,
+  "avg_rating": 3.08,
+  "top_brands": [
+    "Unknown",
+    "Allure Auto",
+    "Regular",
+    "Voylla",
+    "Slim",
+    "TheLostPuppy",
+    "Karatcraft",
+    "Black",
+    "White",
+    "DailyObjects",
+    "Speedwav",
+    "Radiant Bay",
+    "Red",
+    "Enthopia",
+    "Pink"
+  ],
+  "top_categories": [
+    "Clothing",
+    "Jewellery",
+    "Footwear",
+    "Mobiles & Accessories",
+    "Automotive",
+    "Home Decor & Festive Needs",
+    "Beauty and Personal Care",
+    "Home Furnishing",
+    "Kitchen & Dining",
+    "Computers"
+  ],
+  "feature_cols": [
+    "retail_price",
+    "brand_enc",
+    "cat_enc",
+    "rating",
+    "discount_pct"
+  ],
+  "target_col": "discounted_price",
+  "train_size": 8637,
+  "test_size": 2160
+}

@@ -25,9 +25,10 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-DATA_CSV   = "flipkart_com-ecommerce_sample.csv"
-MODELS_DIR = "models"
-DATA_DIR   = "data"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_CSV   = os.path.join(PROJECT_ROOT, "data", "raw", "flipkart_com-ecommerce_sample.csv")
+MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
+DATA_DIR   = os.path.join(PROJECT_ROOT, "data")
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(DATA_DIR,   exist_ok=True)

@@ -25,7 +25,7 @@ import sys
 
 # Project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'raw', 'flipkart_com_ecommerce_sample.csv')
+DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'raw', 'flipkart_com-ecommerce_sample.csv')
 MODELS_DIR = os.path.join(PROJECT_ROOT, 'models')
 
 
