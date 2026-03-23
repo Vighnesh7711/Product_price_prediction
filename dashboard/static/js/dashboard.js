@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   PriceOracle  —  Dashboard JS  (v3)
+   PriceOracle  —  Dashboard JS  (v4)
    ══════════════════════════════════════════════════════════════ */
 
 // ── DOM refs ─────────────────────────────────────────────────────
@@ -15,6 +15,7 @@ const heroEl = $('#hero');
 
 let priceChart = null;
 let categoryChart = null;
+let gaugeChart = null;
 
 // ── chart colours ────────────────────────────────────────────────
 const C = {
@@ -123,7 +124,7 @@ function render(data) {
   // ── Specifications ─────────────────────────────
   renderSpecs(product.specifications || {});
 
-  // ── Metrics ────────────────────────────────────
+  // ── Metrics + Charts ──────────────────────────
   if (predictions && !predictions.error) {
     $('#mv-7d').textContent = `₹${fmt(predictions.predicted_7d)}`;
     $('#mc-7d-pct').textContent = `${predictions.week_change_pct > 0 ? '+' : ''}${predictions.week_change_pct}%`;
@@ -142,11 +143,16 @@ function render(data) {
     // Model used
     $('#mv-model').textContent = predictions.model_used || '—';
 
+    // Buy / Wait indicator
+    renderBuyWait(predictions, product);
+
     drawPriceChart(predictions);
     renderInsights(predictions.insights || []);
+  }
 
-    // ── Model performance table ──────────────────
-    renderModelPerformance(predictions.global_scores || {}, predictions.model_scores || {}, predictions.model_used);
+  // Price position gauge
+  if (category_stats && category_stats.avg_price && product.price) {
+    drawGaugeChart(product.price, category_stats);
   }
 
   // similar products
@@ -201,80 +207,159 @@ function renderSpecs(specs) {
     </tr>`).join('');
 }
 
-// ── model performance table ──────────────────────────────────────
-function renderModelPerformance(globalScores, catScores, bestModel) {
-  const body = $('#model-perf-body');
-  const subtitle = $('#model-table-subtitle');
-  if (!body) return;
+// ══════════════════════════════════════════════════════════════════
+//  BUY / WAIT INDICATOR
+// ══════════════════════════════════════════════════════════════════
+function renderBuyWait(predictions, product) {
+  const card = $('#buy-wait-card');
+  const iconEl = $('#bw-icon');
+  const labelEl = $('#bw-label');
+  const reasonEl = $('#bw-reason');
+  const confEl = $('#bw-confidence');
+  if (!card) return;
 
-  const modelOrder = ['RandomForest', 'DecisionTree', 'Ridge', 'XGBoost'];
-  const modelLabels = {
-    'RandomForest': '🌲 Random Forest',
-    'DecisionTree': '🌳 Decision Tree',
-    'Ridge': '📐 Ridge Regression',
-    'XGBoost': '🚀 XGBoost',
-  };
+  const monthPct = predictions.month_change_pct || 0;
+  const weekPct  = predictions.week_change_pct || 0;
+  const trend    = predictions.trend || 'stable';
+  const conf     = predictions.confidence || 'low';
 
-  // Find best global model
-  let bestGlobal = '';
-  let bestR2 = -999;
-  for (const m of modelOrder) {
-    if (globalScores[m] && globalScores[m].r2 > bestR2) {
-      bestR2 = globalScores[m].r2;
-      bestGlobal = m;
+  // Decision logic: if prices are expected to rise → buy now, if dropping → wait
+  let isBuy = false;
+  let reason = '';
+
+  if (trend === 'up' || monthPct > 2) {
+    isBuy = true;
+    reason = `Prices are predicted to rise ~${Math.abs(monthPct).toFixed(1)}% over the next 30 days. Buying now could save you ₹${fmt(Math.abs(predictions.predicted_30d - product.price))}.`;
+  } else if (trend === 'down' || monthPct < -2) {
+    isBuy = false;
+    reason = `Prices are predicted to drop ~${Math.abs(monthPct).toFixed(1)}% over the next 30 days. Waiting could save you ₹${fmt(Math.abs(product.price - predictions.predicted_30d))}.`;
+  } else {
+    // Stable — check week trend
+    if (weekPct > 1) {
+      isBuy = true;
+      reason = 'Short-term prices show a slight upward trend. Buying now is a safe bet.';
+    } else if (weekPct < -1) {
+      isBuy = false;
+      reason = 'Short-term prices show a slight dip. Waiting a week might get you a better deal.';
+    } else {
+      isBuy = true;
+      reason = 'Prices are stable with no significant change expected. Good time to buy at current price.';
     }
   }
 
-  if (subtitle) {
-    subtitle.textContent = `All 4 models trained on historical data. Best global model: ${modelLabels[bestGlobal] || bestGlobal} (R² = ${bestR2.toFixed(4)})`;
-  }
+  // Update card
+  card.classList.remove('bw-buy', 'bw-wait');
+  card.classList.add(isBuy ? 'bw-buy' : 'bw-wait');
+  iconEl.textContent = isBuy ? '🛒' : '⏳';
+  labelEl.textContent = isBuy ? 'BUY NOW' : 'WAIT';
+  labelEl.className = `bw-label ${isBuy ? 'buy' : 'wait'}`;
+  reasonEl.textContent = reason;
 
-  body.innerHTML = modelOrder.map(m => {
-    const s = globalScores[m];
-    if (!s) return `
-      <tr class="perf-row">
-        <td>${modelLabels[m] || m}</td>
-        <td colspan="3" style="color:var(--text-dim)">Not available (install xgboost)</td>
-        <td>—</td>
-      </tr>`;
+  const confColors = { high: '#34d399', medium: '#fbbf24', low: '#f87171' };
+  const confLabels = { high: '🟢 High', medium: '🟡 Medium', low: '🔴 Low' };
+  confEl.textContent = confLabels[conf] || conf;
+  confEl.style.color = confColors[conf] || '#94a3b8';
+}
 
-    const isBest = m === bestGlobal;
-    const isUsed = m === bestModel;
-    let status = '';
-    if (isUsed && isBest) status = '<span class="badge badge-best">✨ Best & Used</span>';
-    else if (isBest) status = '<span class="badge badge-best">🏆 Best Overall</span>';
-    else if (isUsed) status = '<span class="badge badge-used">⚡ Used</span>';
-    else status = '<span class="badge badge-other">—</span>';
+// ══════════════════════════════════════════════════════════════════
+//  PRICE POSITION GAUGE CHART
+// ══════════════════════════════════════════════════════════════════
+function drawGaugeChart(currentPrice, catStats) {
+  if (gaugeChart) gaugeChart.destroy();
 
-    return `
-      <tr class="perf-row ${isBest ? 'row-best' : ''}">
-        <td class="model-name">${modelLabels[m] || m}</td>
-        <td><span class="score-pill ${s.r2 > 0.9 ? 'score-great' : s.r2 > 0.7 ? 'score-good' : 'score-low'}">${s.r2.toFixed(4)}</span></td>
-        <td>${s.mae.toFixed(2)}</td>
-        <td>${s.rmse.toFixed(2)}</td>
-        <td>${status}</td>
-      </tr>`;
-  }).join('');
+  const avg = catStats.avg_price || 0;
+  const min = catStats.min_price || avg * 0.3;
+  const max = catStats.max_price || avg * 3;
+  const range = max - min || 1;
 
-  // Per-category scores
-  const catSection = $('#cat-model-section');
-  const catBody = $('#cat-model-body');
-  if (catBody && Object.keys(catScores).length) {
-    catSection.classList.remove('hidden');
-    catBody.innerHTML = modelOrder.map(m => {
-      const s = catScores[m];
-      if (!s) return '';
-      return `
-        <tr>
-          <td>${modelLabels[m] || m}</td>
-          <td><span class="score-pill ${s.r2 > 0.9 ? 'score-great' : s.r2 > 0.7 ? 'score-good' : 'score-low'}">${s.r2.toFixed(4)}</span></td>
-          <td>${s.mae.toFixed(2)}</td>
-          <td>${s.rmse.toFixed(2)}</td>
-        </tr>`;
-    }).join('');
-  } else if (catSection) {
-    catSection.classList.add('hidden');
-  }
+  // Normalize current price to 0-100 within the range
+  const pct = Math.max(0, Math.min(100, ((currentPrice - min) / range) * 100));
+
+  // Determine color segments: Low (green) | Fair (amber) | High (red)
+  const lowEnd = 35;
+  const midEnd = 65;
+
+  // Segments: what % of the gauge is filled vs empty
+  const segments = [lowEnd, midEnd - lowEnd, 100 - midEnd];
+  const segColors = ['rgba(52,211,153,.6)', 'rgba(251,191,36,.6)', 'rgba(248,113,113,.6)'];
+
+  // Position label
+  let posLabel = 'Fair Price';
+  let posColor = '#fbbf24';
+  if (pct < lowEnd) { posLabel = 'Below Average — Great Deal!'; posColor = '#34d399'; }
+  else if (pct > midEnd) { posLabel = 'Above Average — Pricey'; posColor = '#f87171'; }
+
+  const ctx = $('#gauge-chart').getContext('2d');
+
+  gaugeChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Low Range', 'Mid Range', 'High Range'],
+      datasets: [
+        {
+          data: segments,
+          backgroundColor: segColors,
+          borderWidth: 0,
+          circumference: 180,
+          rotation: 270,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      cutout: '75%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+      },
+    },
+    plugins: [{
+      id: 'gaugeNeedle',
+      afterDatasetDraw(chart) {
+        const { ctx: c, chartArea } = chart;
+        const cx = (chartArea.left + chartArea.right) / 2;
+        const cy = chartArea.bottom - 10;
+        const outerR = Math.min(chartArea.right - chartArea.left, chartArea.bottom - chartArea.top) * 0.48;
+
+        // Needle angle: 180° arc from left (π) to right (0), mapped to pct
+        const angle = Math.PI + (pct / 100) * Math.PI;
+        const needleLen = outerR * 0.85;
+        const nx = cx + Math.cos(angle) * needleLen;
+        const ny = cy + Math.sin(angle) * needleLen;
+
+        // Draw needle
+        c.save();
+        c.beginPath();
+        c.moveTo(cx - 2, cy);
+        c.lineTo(nx, ny);
+        c.lineTo(cx + 2, cy);
+        c.fillStyle = '#e2e8f0';
+        c.fill();
+
+        // Center dot
+        c.beginPath();
+        c.arc(cx, cy, 6, 0, Math.PI * 2);
+        c.fillStyle = '#818cf8';
+        c.fill();
+
+        // Price label in center
+        c.textAlign = 'center';
+        c.fillStyle = posColor;
+        c.font = 'bold 14px Inter, sans-serif';
+        c.fillText(posLabel, cx, cy - 22);
+        c.fillStyle = '#e2e8f0';
+        c.font = 'bold 20px Inter, sans-serif';
+        c.fillText(`₹${Number(currentPrice).toLocaleString('en-IN')}`, cx, cy - 2);
+        c.restore();
+      },
+    }],
+  });
+
+  // Labels
+  $('#gauge-min').textContent = `₹${fmt(min)}`;
+  $('#gauge-current').textContent = '';
+  $('#gauge-max').textContent = `₹${fmt(max)}`;
 }
 
 // ── price chart ──────────────────────────────────────────────────

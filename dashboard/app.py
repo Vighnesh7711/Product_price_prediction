@@ -107,10 +107,6 @@ def get_categories():
     return jsonify({'categories': list(category_detector.keywords.keys())})
 
 
-@app.route('/api/model-performance')
-def model_performance():
-    """Return global ML model performance scores."""
-    return jsonify(price_predictor.get_performance_summary())
 
 
 # ── helper ────────────────────────────────────────────────────────

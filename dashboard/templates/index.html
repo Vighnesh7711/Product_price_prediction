@@ -79,6 +79,22 @@
       </div>
     </div>
 
+    <!-- ═══ BUY / WAIT INDICATOR ═══ -->
+    <div class="container">
+      <h2>Buy or Wait?</h2>
+      <div id="buy-wait-card" class="glass-card buy-wait-card">
+        <div class="bw-icon" id="bw-icon"></div>
+        <div class="bw-body">
+          <div class="bw-label" id="bw-label"></div>
+          <div class="bw-reason" id="bw-reason"></div>
+        </div>
+        <div class="bw-score">
+          <div class="bw-score-label">Confidence</div>
+          <div class="bw-score-value" id="bw-confidence"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- key metrics -->
     <div class="container">
       <h2>Price Prediction Overview</h2>
@@ -108,48 +124,24 @@
       </div>
     </div>
 
-    <!-- ML Model Performance Table -->
-    <div class="container">
-      <h2>🤖 ML Model Performance Analysis</h2>
-      <p class="section-subtitle" id="model-table-subtitle"></p>
-      <div class="glass-card table-card">
-        <table id="model-perf-table" class="perf-table">
-          <thead>
-            <tr>
-              <th>Model</th>
-              <th>R² Score</th>
-              <th>MAE</th>
-              <th>RMSE</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="model-perf-body"></tbody>
-        </table>
-      </div>
-      <!-- Per-category scores -->
-      <div id="cat-model-section" class="hidden" style="margin-top:1.5rem;">
-        <h3 style="margin-bottom:.75rem;font-size:1.1rem;">📊 Category-Level Model Scores</h3>
-        <div class="glass-card table-card">
-          <table id="cat-model-table" class="perf-table">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>R² Score</th>
-                <th>MAE</th>
-                <th>RMSE</th>
-              </tr>
-            </thead>
-            <tbody id="cat-model-body"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
     <!-- price chart -->
     <div class="container">
       <h2>Price Trend &amp; Forecast</h2>
       <div class="glass-card chart-card">
         <canvas id="price-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ═══ PRICE POSITION GAUGE ═══ -->
+    <div class="container">
+      <h2>Price Position in Category</h2>
+      <div class="glass-card chart-card gauge-wrapper">
+        <canvas id="gauge-chart"></canvas>
+        <div class="gauge-labels">
+          <span class="gauge-min" id="gauge-min"></span>
+          <span class="gauge-current" id="gauge-current"></span>
+          <span class="gauge-max" id="gauge-max"></span>
+        </div>
       </div>
     </div>
 
@@ -201,7 +193,7 @@
     <p>PriceOracle &mdash; built with Flask, Chart.js, scikit-learn, XGBoost &amp; real Flipkart data</p>
   </footer>
 
-  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=3"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=4"></script>
 </body>
 
 </html>

@@ -2,7 +2,7 @@
 predictor.py
 ============
 Cross-sectional price prediction pipeline.
-Loads the trained Ridge Regression model and encoders to predict
+Loads the trained XGBoost model and encoders to predict
 fair prices from product features.
 """
 
@@ -16,7 +16,7 @@ MODELS_DIR = os.path.join(PROJECT_ROOT, 'models')
 
 class PricePredictionPipeline:
     """
-    Predict fair price from product attributes using the trained Ridge model.
+    Predict fair price from product attributes using the trained XGBoost model.
 
     Inputs: brand, category, rating, retail_price, discount_percentage
     Outputs: predicted_fair_price, expected_discount, confidence_score
@@ -25,25 +25,22 @@ class PricePredictionPipeline:
     def __init__(self, models_dir=None):
         models_dir = models_dir or MODELS_DIR
         self.model = None
-        self.scaler = None
         self.brand_encoder = None
         self.cat_encoder = None
         self.loaded = False
         self._load(models_dir)
 
     def _load(self, models_dir):
-        ridge_path = os.path.join(models_dir, 'ridge_model.pkl')
+        xgb_path = os.path.join(models_dir, 'xgb_model.pkl')
         brand_path = os.path.join(models_dir, 'brand_encoder.pkl')
         cat_path = os.path.join(models_dir, 'cat_encoder.pkl')
 
-        if not all(os.path.exists(p) for p in [ridge_path, brand_path, cat_path]):
+        if not all(os.path.exists(p) for p in [xgb_path, brand_path, cat_path]):
             print("[PricePredictionPipeline] Model files not found. Run train_models.py first.")
             return
 
-        with open(ridge_path, 'rb') as f:
-            ridge_data = pickle.load(f)
-            self.model = ridge_data['model']
-            self.scaler = ridge_data['scaler']
+        with open(xgb_path, 'rb') as f:
+            self.model = pickle.load(f)
 
         with open(brand_path, 'rb') as f:
             self.brand_encoder = pickle.load(f)
@@ -52,7 +49,7 @@ class PricePredictionPipeline:
             self.cat_encoder = pickle.load(f)
 
         self.loaded = True
-        print(f"[PricePredictionPipeline] Loaded Ridge model + encoders from {models_dir}")
+        print(f"[PricePredictionPipeline] Loaded XGBoost model + encoders from {models_dir}")
 
     def _safe_encode(self, encoder, value):
         """Encode a label, falling back to 0 if unseen."""
@@ -82,8 +79,7 @@ class PricePredictionPipeline:
         discount_pct = max(0.0, min(100.0, float(discount_percentage)))
 
         features = np.array([[retail_price, brand_enc, cat_enc, rating, discount_pct]])
-        features_scaled = self.scaler.transform(features)
-        predicted_price = float(self.model.predict(features_scaled)[0])
+        predicted_price = float(self.model.predict(features)[0])
         predicted_price = max(0, predicted_price)
 
         expected_discount = 0.0

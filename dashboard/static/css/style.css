@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════
-   PriceOracle  —  Dark Glassmorphism Theme  (v3)
+   PriceOracle  —  Dark Glassmorphism Theme  (v4)
    ══════════════════════════════════════════════════════════════ */
 
 /* ── tokens ────────────────────────────────────────────────────── */
@@ -180,21 +180,6 @@ img { display: block; max-width: 100%; }
   padding: .25rem .7rem; border-radius: 999px;
   background: var(--primary-d); color: #fff;
 }
-.badge-best {
-  background: linear-gradient(135deg, var(--green), #2dd4bf);
-  color: #fff; font-size: .7rem; font-weight: 600;
-  padding: .2rem .6rem; border-radius: 999px;
-}
-.badge-used {
-  background: linear-gradient(135deg, var(--primary-d), var(--secondary));
-  color: #fff; font-size: .7rem; font-weight: 600;
-  padding: .2rem .6rem; border-radius: 999px;
-}
-.badge-other {
-  background: var(--surface-h);
-  color: var(--text-dim); font-size: .7rem; font-weight: 600;
-  padding: .2rem .6rem; border-radius: 999px;
-}
 h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem; }
 
 /* ── product card ──────────────────────────────────────────────── */
@@ -247,6 +232,62 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem; }
 .extra-chip strong { color: var(--text); font-weight: 500; }
 .extra-chip a { font-size: .78rem; }
 
+/* ══════════════ BUY / WAIT INDICATOR ══════════════ */
+.buy-wait-card {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  transition: border-color .4s ease;
+}
+.buy-wait-card.bw-buy {
+  border-color: rgba(52,211,153,.35);
+  background: linear-gradient(135deg, rgba(52,211,153,.06), rgba(52,211,153,.02));
+}
+.buy-wait-card.bw-wait {
+  border-color: rgba(251,191,36,.35);
+  background: linear-gradient(135deg, rgba(251,191,36,.06), rgba(251,191,36,.02));
+}
+.bw-icon {
+  font-size: 2.8rem;
+  flex-shrink: 0;
+  line-height: 1;
+  animation: bw-pulse 2s ease-in-out infinite;
+}
+@keyframes bw-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.1); }
+}
+.bw-body { flex: 1; }
+.bw-label {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -.3px;
+}
+.bw-label.buy  { color: var(--green); }
+.bw-label.wait { color: var(--amber); }
+.bw-reason {
+  color: var(--text-dim);
+  font-size: .9rem;
+  margin-top: .25rem;
+  line-height: 1.5;
+}
+.bw-score {
+  text-align: center;
+  flex-shrink: 0;
+}
+.bw-score-label {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-dim);
+  margin-bottom: .25rem;
+}
+.bw-score-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
 /* ── metric cards ──────────────────────────────────────────────── */
 .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; }
 .metric-card { padding: 1.5rem; display: flex; flex-direction: column; gap: .35rem; }
@@ -260,6 +301,29 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem; }
 /* ── chart card ────────────────────────────────────────────────── */
 .chart-card { padding: 1.5rem; }
 .chart-card canvas { width: 100% !important; max-height: 400px; }
+
+/* ── gauge chart ──────────────────────────────────────────────── */
+.gauge-wrapper {
+  position: relative;
+}
+.gauge-wrapper canvas {
+  max-height: 260px;
+}
+.gauge-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2rem;
+  margin-top: -.5rem;
+}
+.gauge-min, .gauge-max {
+  font-size: .8rem;
+  color: var(--text-dim);
+}
+.gauge-current {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
 
 /* ── insights ──────────────────────────────────────────────────── */
 .insights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
@@ -293,7 +357,7 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem; }
 .similar-card .s-price { font-size: 1.15rem; font-weight: 700; color: var(--green); margin-top: auto; }
 .similar-card .s-meta { display: flex; justify-content: space-between; font-size: .78rem; color: var(--text-dim); }
 
-/* ══════════════ PERFORMANCE TABLE ══════════════ */
+/* ── specs table ──────────────────────────────────────────────── */
 .table-card { padding: 1.5rem; overflow-x: auto; }
 .perf-table {
   width: 100%;
@@ -316,22 +380,6 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem; }
   border-bottom: 1px solid rgba(255,255,255,.04);
 }
 .perf-table tr:last-child td { border-bottom: none; }
-.perf-row.row-best {
-  background: linear-gradient(90deg, rgba(52,211,153,.06) 0%, rgba(52,211,153,.02) 100%);
-}
-.model-name { font-weight: 600; }
-
-/* score pills */
-.score-pill {
-  display: inline-block;
-  padding: .15rem .55rem;
-  border-radius: 999px;
-  font-weight: 600;
-  font-size: .82rem;
-}
-.score-great { background: rgba(52,211,153,.15); color: #34d399; }
-.score-good  { background: rgba(251,191,36,.12); color: #fbbf24; }
-.score-low   { background: rgba(248,113,113,.12); color: #f87171; }
 
 /* ── footer ────────────────────────────────────────────────────── */
 .footer { text-align: center; padding: 3rem 1rem; color: var(--text-dim); font-size: .8rem; }
@@ -358,6 +406,6 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 1.25rem; }
   .hero-title { font-size: 2.2rem; }
   .input-glow { flex-direction: column; }
   #analyze-btn { width: 100%; }
-  .perf-table { font-size: .78rem; }
-  .perf-table th, .perf-table td { padding: .5rem .6rem; }
+  .buy-wait-card { flex-direction: column; text-align: center; }
+  .bw-score { margin-top: .5rem; }
 }
